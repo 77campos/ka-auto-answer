@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Khan Academy — Auto Answer (IA)
 // @namespace    smith/ka
-// @version      7.4.3
+// @version      7.4.4
 // @description  Lê a questão renderizada, resolve com OpenRouter/Gemini ou APIs OpenAI-compatible.
 // @match        https://*.khanacademy.org/*
 // @match        https://khanacademy.org/*
@@ -13,7 +13,7 @@
 (() => {
   'use strict';
 
-  const VERSION = '7.4.3';
+  const VERSION = '7.4.4';
   const LS_KEY = 'ka_auto_cfg_v8';
   const TIMEOUT = 25000;
   const GEMINI_TIMEOUT = 90000;
@@ -51,7 +51,7 @@
     if (gemini === null) return;
     const openrouter = prompt('Cole sua chave OpenRouter (deixe vazio para manter a atual):');
     if (openrouter === null) return;
-    const model = prompt('Modelo Gemini (deixe vazio para manter):', CFG.geminiModel || 'gemini-3.8-flash');
+    const model = prompt('Modelo Gemini (deixe vazio para manter):', CFG.geminiModel || 'gemini-3.5-flash-lite');
     if (model === null) return;
     const compat = KEYS.compatible || { baseUrl: '', model: '', keys: [] };
     const compatKey = prompt('Chave da API compatível com OpenAI (opcional; deixe vazio para manter):');
@@ -729,7 +729,7 @@
 
   async function callGemini(prompt, apiKey) {
     if (!apiKey) throw makeErr('Chave Gemini ausente. Use “Configurar chaves”.', 401);
-    const model = CFG.geminiModel || 'gemini-3.8-flash';
+    const model = CFG.geminiModel || 'gemini-3.5-flash-lite';
     const generationConfig = { responseMimeType: 'application/json' };
     // Gemini 3 uses medium thinking by default; low is faster for a single short answer.
     if (/^gemini-3(?:\.\d+)?-/i.test(model)) {
@@ -1226,6 +1226,7 @@
   );
 
   ensureUI();
+  log('versão ' + VERSION);
   setInterval(ensureUI, 3000);
   setInterval(() => { tick(); }, CFG.pollMs);
   setTimeout(() => { tick(); }, 800);
