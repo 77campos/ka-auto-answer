@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Khan Academy — Auto Answer (IA)
 // @namespace    smith/ka
-// @version      7.4.0
+// @version      7.4.1
 // @description  Lê a questão renderizada, resolve com OpenRouter/Gemini ou APIs OpenAI-compatible.
 // @match        https://*.khanacademy.org/*
 // @match        https://khanacademy.org/*
@@ -13,7 +13,7 @@
 (() => {
   'use strict';
 
-  const VERSION = '7.4.0';
+  const VERSION = '7.4.1';
   const LS_KEY = 'ka_auto_cfg_v8';
   const TIMEOUT = 25000;
 
@@ -732,13 +732,14 @@
     const r = await fetchWithTimeout(
       `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
         model
-      )}:generateContent?key=${encodeURIComponent(apiKey)}`,
+      )}:generateContent`,
       {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: { 'content-type': 'application/json', 'x-goog-api-key': apiKey },
         body: JSON.stringify({
           contents: [{ role: 'user', parts: [{ text: prompt }] }],
-          generationConfig: { temperature: 0, responseMimeType: 'application/json' },
+          // Gemini 3.8 rejects legacy sampling controls such as temperature.
+          generationConfig: { responseMimeType: 'application/json' },
         }),
       },
       TIMEOUT
