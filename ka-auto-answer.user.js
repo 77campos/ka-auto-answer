@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Khan Academy — Auto Answer (IA)
 // @namespace    smith/ka
-// @version      7.4.1
+// @version      7.4.2
 // @description  Lê a questão renderizada, resolve com OpenRouter/Gemini ou APIs OpenAI-compatible.
 // @match        https://*.khanacademy.org/*
 // @match        https://khanacademy.org/*
@@ -13,9 +13,10 @@
 (() => {
   'use strict';
 
-  const VERSION = '7.4.1';
+  const VERSION = '7.4.2';
   const LS_KEY = 'ka_auto_cfg_v8';
   const TIMEOUT = 25000;
+  const GEMINI_TIMEOUT = 90000;
 
   // As chaves ficam no armazenamento local do navegador, nunca neste arquivo.
   const KEYS_KEY = 'ka_auto_api_keys_v1';
@@ -729,7 +730,9 @@
   async function callGemini(prompt, apiKey) {
     if (!apiKey) throw makeErr('Chave Gemini ausente. Use “Configurar chaves”.', 401);
     const model = CFG.geminiModel || 'gemini-3.8-flash';
-    const r = await fetchWithTimeout(
+    let r;
+    try {
+      r = await fetchWithTimeout(
       `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
         model
       )}:generateContent`,
@@ -742,8 +745,14 @@
           generationConfig: { responseMimeType: 'application/json' },
         }),
       },
-      TIMEOUT
-    );
+        GEMINI_TIMEOUT
+      );
+    } catch (e) {
+      if (e && (/abort/i.test(e.name || '') || /abort/i.test(e.message || ''))) {
+        throw makeErr('Gemini excedeu o limite de 90 segundos.', 0);
+      }
+      throw e;
+    }
     if (!r.ok) {
       let retryMs = 0;
       const ra = Number(r.headers.get('retry-after'));
