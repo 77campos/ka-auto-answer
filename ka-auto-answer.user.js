@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Khan Academy — Auto Answer (IA)
 // @namespace    smith/ka
-// @version      7.4.2
+// @version      7.4.3
 // @description  Lê a questão renderizada, resolve com OpenRouter/Gemini ou APIs OpenAI-compatible.
 // @match        https://*.khanacademy.org/*
 // @match        https://khanacademy.org/*
@@ -13,7 +13,7 @@
 (() => {
   'use strict';
 
-  const VERSION = '7.4.2';
+  const VERSION = '7.4.3';
   const LS_KEY = 'ka_auto_cfg_v8';
   const TIMEOUT = 25000;
   const GEMINI_TIMEOUT = 90000;
@@ -730,6 +730,11 @@
   async function callGemini(prompt, apiKey) {
     if (!apiKey) throw makeErr('Chave Gemini ausente. Use “Configurar chaves”.', 401);
     const model = CFG.geminiModel || 'gemini-3.8-flash';
+    const generationConfig = { responseMimeType: 'application/json' };
+    // Gemini 3 uses medium thinking by default; low is faster for a single short answer.
+    if (/^gemini-3(?:\.\d+)?-/i.test(model)) {
+      generationConfig.thinkingConfig = { thinkingLevel: 'LOW' };
+    }
     let r;
     try {
       r = await fetchWithTimeout(
@@ -742,7 +747,7 @@
         body: JSON.stringify({
           contents: [{ role: 'user', parts: [{ text: prompt }] }],
           // Gemini 3.8 rejects legacy sampling controls such as temperature.
-          generationConfig: { responseMimeType: 'application/json' },
+          generationConfig,
         }),
       },
         GEMINI_TIMEOUT
