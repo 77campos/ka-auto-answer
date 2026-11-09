@@ -1,6 +1,6 @@
 # KA Auto Answer
 
-Página de instalação do bookmarklet e userscript da Khan Academy. O modo automático prioriza OpenRouter; o gerador aceita chaves Gemini/OpenRouter e uma API compatível com OpenAI Chat Completions.
+Página de instalação do bookmarklet e userscript para Khan Academy. O modo automático prioriza OpenRouter; o gerador aceita chaves Gemini/OpenRouter e uma API compatível com OpenAI Chat Completions.
 
 ## Usar
 
