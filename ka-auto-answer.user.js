@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Khan Academy — Auto Answer (IA)
 // @namespace    smith/ka
-// @version      7.4.4
+// @version      7.5.0
 // @description  Lê a questão renderizada, resolve com OpenRouter/Gemini ou APIs OpenAI-compatible.
 // @match        https://*.khanacademy.org/*
 // @match        https://khanacademy.org/*
@@ -13,7 +13,7 @@
 (() => {
   'use strict';
 
-  const VERSION = '7.4.4';
+  const VERSION = '7.5.0';
   const LS_KEY = 'ka_auto_cfg_v8';
   const TIMEOUT = 25000;
   const GEMINI_TIMEOUT = 90000;
@@ -32,6 +32,8 @@
       backend: 'auto', // auto | gemini | openrouter
       model: '',
       geminiModel: '',
+      panelX: null,
+      panelY: null,
       pollMs: 1200,
       debug: true,
     },
@@ -156,16 +158,17 @@
     const b = mk(
       'button',
       {
-        padding: '7px 9px',
-        borderRadius: '8px',
-        border: '1px solid transparent',
+        padding: '9px 10px',
+        borderRadius: '10px',
+        border: '1px solid rgba(255,255,255,.08)',
         background: bg,
         color: '#fff',
-        font: '600 12px system-ui, sans-serif',
+        font: '650 11px system-ui, sans-serif',
         cursor: 'pointer',
         lineHeight: '1.1',
         flex: '1',
         minWidth: '0',
+        transition: 'background .16s ease, border-color .16s ease, transform .16s ease',
       },
       text
     );
@@ -185,7 +188,22 @@
           ? '#065f46'
           : '#1f2937';
     }
-    if (statusEl) statusEl.textContent = text;
+    if (statusEl) {
+      statusEl.textContent = text;
+      const positive = /concluída|correto|chaves salvas|ia ok/i.test(text);
+      const negative = /erro|falha|indisponível|desisti/i.test(text);
+      statusEl.style.color = positive ? '#86efac' : negative ? '#fca5a5' : '#fde68a';
+      statusEl.style.background = positive
+        ? 'rgba(16,185,129,.10)'
+        : negative
+          ? 'rgba(239,68,68,.10)'
+          : 'rgba(245,158,11,.09)';
+      statusEl.style.borderColor = positive
+        ? 'rgba(110,231,183,.2)'
+        : negative
+          ? 'rgba(252,165,165,.2)'
+          : 'rgba(245,158,11,.16)';
+    }
     if (pillEl) {
       pillEl.textContent = CFG.enabled ? 'ON' : 'OFF';
       pillEl.style.background = CFG.enabled ? '#065f46' : '#4b5563';
@@ -204,7 +222,9 @@
       const active = CFG.backend === k;
       b.style.background = active ? '#7c3aed' : '#1f2937';
       b.style.color = active ? '#fff' : '#cbd5e1';
-      b.style.borderColor = active ? '#a78bfa' : 'transparent';
+      b.style.borderColor = active ? 'rgba(216,180,254,.72)' : 'rgba(255,255,255,.07)';
+      b.style.boxShadow = active ? '0 3px 12px rgba(139,92,246,.2)' : 'none';
+      b.style.borderRadius = '999px';
     }
     if (autoChk) autoChk.checked = !!CFG.autoAdvance;
     if (statusEl) statusEl.textContent = statusText;
@@ -228,7 +248,10 @@
       color: '#e5e7eb',
       opacity: '0.92',
       cursor: 'pointer',
-      boxShadow: '0 3px 10px rgba(0,0,0,.4)',
+      border: '1px solid rgba(192,132,252,.35)',
+      background: 'linear-gradient(105deg, rgba(91,33,182,.96), rgba(31,41,55,.97))',
+      boxShadow: '0 8px 24px rgba(0,0,0,.34), 0 0 18px rgba(139,92,246,.16)',
+      backdropFilter: 'blur(12px)',
       userSelect: 'none',
       maxWidth: '70vw',
       whiteSpace: 'nowrap',
@@ -247,34 +270,51 @@
       right: '12px',
       bottom: '52px',
       zIndex: 2147483647,
-      width: 'min(430px, 92vw)',
-      maxHeight: '72vh',
+      width: 'min(460px, calc(100vw - 24px))',
+      maxHeight: '78vh',
       overflow: 'hidden',
-      background: 'rgba(17,24,39,.98)',
-      color: '#e5e7eb',
-      borderRadius: '12px',
-      boxShadow: '0 8px 28px rgba(0,0,0,.6)',
-      border: '1px solid #374151',
+      background: 'linear-gradient(150deg, rgba(28,20,40,.98), rgba(12,16,29,.99))',
+      color: '#f3eefc',
+      borderRadius: '16px',
+      boxShadow: '0 18px 52px rgba(0,0,0,.52), 0 0 0 1px rgba(168,85,247,.10), 0 10px 38px rgba(139,92,246,.13)',
+      border: '1px solid rgba(192,132,252,.38)',
+      backdropFilter: 'blur(18px)',
       boxSizing: 'border-box',
       display: 'none',
     });
+    if (Number.isFinite(CFG.panelX) && Number.isFinite(CFG.panelY)) {
+      panel.style.left = `${CFG.panelX}px`;
+      panel.style.top = `${CFG.panelY}px`;
+      panel.style.right = 'auto';
+      panel.style.bottom = 'auto';
+    }
     panel.dataset.kaAutoPanel = '1';
     panel.onclick = (e) => e.stopPropagation();
 
     const head = mk('div', {
       display: 'flex',
       alignItems: 'center',
-      gap: '8px',
-      padding: '9px 12px',
-      background: '#111827',
-      borderBottom: '1px solid #374151',
-      borderRadius: '12px 12px 0 0',
+      gap: '9px',
+      padding: '11px 13px',
+      background: 'linear-gradient(110deg, rgba(91,33,182,.24), rgba(17,24,39,.38))',
+      borderBottom: '1px solid rgba(192,132,252,.18)',
+      borderRadius: '16px 16px 0 0',
+      cursor: 'grab',
+      touchAction: 'none',
+      userSelect: 'none',
     });
+    const grip = mk('span', {
+      color: 'rgba(216,180,254,.7)',
+      font: '700 15px/1 system-ui, sans-serif',
+      letterSpacing: '-3px',
+      cursor: 'grab',
+      flex: '0 0 auto',
+    }, '⠿');
     const title = mk(
       'div',
       {
-        font: '700 12px system-ui, sans-serif',
-        color: '#a78bfa',
+        font: '750 13px system-ui, sans-serif',
+        color: '#d8b4fe',
         flex: '1',
         whiteSpace: 'nowrap',
         overflow: 'hidden',
@@ -285,21 +325,22 @@
     pillEl = mk(
       'span',
       {
-        font: '700 10px system-ui, sans-serif',
-        padding: '2px 8px',
+        font: '750 10px system-ui, sans-serif',
+        padding: '4px 9px',
         borderRadius: '999px',
-        background: '#065f46',
+        background: 'rgba(16,185,129,.15)',
         color: '#6ee7b7',
+        border: '1px solid rgba(110,231,183,.22)',
       },
       'ON'
     );
     const iconBtnCss = {
       background: 'transparent',
       border: '0',
-      color: '#9ca3af',
+      color: '#c4b5d3',
       cursor: 'pointer',
       font: '700 16px/1 system-ui, sans-serif',
-      padding: '2px 6px',
+      padding: '4px 7px',
       borderRadius: '6px',
     };
     const minBtn = mk('button', iconBtnCss, '–');
@@ -310,11 +351,45 @@
     closeBtn.title = 'Fechar';
     closeBtn.onclick = () => togglePanel(false);
 
-    head.append(title, pillEl, minBtn, closeBtn);
+    head.append(grip, title, pillEl, minBtn, closeBtn);
 
-    panelWrap = mk('div', { padding: '10px 12px' });
+    let dragState = null;
+    const stopDragging = (e) => {
+      if (!dragState || e.pointerId !== dragState.pointerId) return;
+      dragState = null;
+      head.style.cursor = 'grab';
+      grip.style.cursor = 'grab';
+      saveCfg();
+    };
+    head.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0 || e.target.closest('button')) return;
+      const rect = panel.getBoundingClientRect();
+      dragState = { pointerId: e.pointerId, dx: e.clientX - rect.left, dy: e.clientY - rect.top };
+      panel.style.left = `${rect.left}px`;
+      panel.style.top = `${rect.top}px`;
+      panel.style.right = 'auto';
+      panel.style.bottom = 'auto';
+      head.style.cursor = 'grabbing';
+      grip.style.cursor = 'grabbing';
+      try { head.setPointerCapture(e.pointerId); } catch {}
+      e.preventDefault();
+    });
+    head.addEventListener('pointermove', (e) => {
+      if (!dragState || e.pointerId !== dragState.pointerId) return;
+      const rect = panel.getBoundingClientRect();
+      const x = Math.max(8, Math.min(window.innerWidth - rect.width - 8, e.clientX - dragState.dx));
+      const y = Math.max(8, Math.min(window.innerHeight - Math.min(rect.height, window.innerHeight - 16) - 8, e.clientY - dragState.dy));
+      panel.style.left = `${x}px`;
+      panel.style.top = `${y}px`;
+      CFG.panelX = x;
+      CFG.panelY = y;
+    });
+    head.addEventListener('pointerup', stopDragging);
+    head.addEventListener('pointercancel', stopDragging);
 
-    const row1 = mk('div', { display: 'flex', gap: '6px', marginBottom: '8px' });
+    panelWrap = mk('div', { padding: '13px', overflowY: 'auto', maxHeight: 'calc(78vh - 48px)' });
+
+    const row1 = mk('div', { display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '8px', marginBottom: '11px' });
     toggleBtn = mkBtn('Desligar', '#059669');
     toggleBtn.dataset.kaAct = 'toggle';
     toggleBtn.onclick = () => toggleEnabled();
@@ -329,11 +404,11 @@
     keysBtn.onclick = () => configureKeys();
     row1.append(toggleBtn, solveBtn, testBtn, keysBtn);
 
-    const row2 = mk('div', { display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '6px', marginBottom: '8px' });
-    row2.appendChild(mk('span', { font: '600 11px system-ui, sans-serif', color: '#9ca3af' }, 'IA:'));
+    const row2 = mk('div', { display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '6px', marginBottom: '10px', padding: '8px 9px', borderRadius: '12px', background: 'rgba(255,255,255,.035)', border: '1px solid rgba(255,255,255,.06)' });
+    row2.appendChild(mk('span', { font: '700 10px system-ui, sans-serif', color: '#a99ab6', letterSpacing: '.08em', marginRight: '2px' }, 'IA'));
     for (const k of ['auto', 'openrouter', 'gemini', 'compatible']) {
       const b = mkBtn(BACKEND_LABEL[k], '#1f2937');
-      b.style.flex = '0 1 auto';
+      b.style.flex = '1 1 auto';
       b.dataset.kaAct = 'backend-' + k;
       b.onclick = () => setBackend(k);
       backendBtns[k] = b;
@@ -346,8 +421,12 @@
       gap: '6px',
       font: '11px system-ui, sans-serif',
       color: '#d1d5db',
-      marginBottom: '8px',
+      marginBottom: '10px',
       cursor: 'pointer',
+      padding: '9px 10px',
+      borderRadius: '10px',
+      background: 'rgba(255,255,255,.035)',
+      border: '1px solid rgba(255,255,255,.06)',
     });
     autoChk = document.createElement('input');
     autoChk.type = 'checkbox';
@@ -364,32 +443,37 @@
       'div',
       {
         font: '600 11px system-ui, sans-serif',
-        color: '#fbbf24',
-        marginBottom: '8px',
-        minHeight: '15px',
+        color: '#fde68a',
+        marginBottom: '11px',
+        minHeight: '17px',
         whiteSpace: 'nowrap',
         overflow: 'hidden',
         textOverflow: 'ellipsis',
+        padding: '8px 10px',
+        borderRadius: '9px',
+        background: 'rgba(245,158,11,.09)',
+        border: '1px solid rgba(245,158,11,.16)',
       },
       statusText
     );
 
     const logsLabel = mk(
       'div',
-      { font: '600 10px system-ui, sans-serif', color: '#6b7280', marginBottom: '3px' },
-      'logs'
+      { font: '750 10px system-ui, sans-serif', color: '#a99ab6', marginBottom: '5px', letterSpacing: '.08em', textTransform: 'uppercase' },
+      'Atividade'
     );
 
     panelBody = mk('div', {
-      font: '10px/1.4 ui-monospace, Consolas, monospace',
-      color: '#9ca3af',
-      maxHeight: '150px',
+      font: '10px/1.55 ui-monospace, Consolas, monospace',
+      color: '#c4b5d3',
+      maxHeight: '168px',
       overflow: 'auto',
       whiteSpace: 'pre-wrap',
-      background: '#0b1220',
-      border: '1px solid #1f2937',
-      borderRadius: '8px',
-      padding: '6px 8px',
+      overflowWrap: 'anywhere',
+      background: 'rgba(6,9,18,.72)',
+      border: '1px solid rgba(192,132,252,.16)',
+      borderRadius: '10px',
+      padding: '9px 10px',
     });
 
     minBtn.onclick = () => {
@@ -417,6 +501,15 @@
     const show = typeof force === 'boolean' ? force : panel.style.display === 'none';
     panel.style.display = show ? 'block' : 'none';
     if (show) {
+      if (panel.style.left !== '' && panel.style.left !== 'auto') {
+        const rect = panel.getBoundingClientRect();
+        const x = Math.max(8, Math.min(window.innerWidth - rect.width - 8, rect.left));
+        const y = Math.max(8, Math.min(window.innerHeight - rect.height - 8, rect.top));
+        panel.style.left = `${x}px`;
+        panel.style.top = `${y}px`;
+        CFG.panelX = x;
+        CFG.panelY = y;
+      }
       renderLogs(true);
       updatePanel();
     }
