@@ -1,17 +1,15 @@
 # KA Auto Answer
 
-Página de instalação do bookmarklet e userscript para Khan Academy. O modo automático prioriza OpenRouter; o gerador aceita chaves Gemini/OpenRouter e uma API compatível com OpenAI Chat Completions.
+Página de instalação do bookmarklet e userscript para Khan Academy. O modo automático prioriza a OpenAI API e usa Gemini como fallback; também aceita uma API compatível com OpenAI Chat Completions.
 
 ## Usar
 
-Abra a página do GitHub Pages, cole a(s) chave(s) e gere o favorito. OpenRouter é usado primeiro quando configurado; Gemini e a API compatível podem atuar como fallback. A API personalizada requer URL base, nome do modelo e suporte a CORS.
+Abra a página do GitHub Pages, informe uma chave da OpenAI API e, se quiser, uma chave Gemini para fallback. Você também pode configurar uma API compatível. O script só resolve quando você clica em **Resolver agora** e acompanha o feedback da resposta.
 
-O script só resolve quando você clica em **Resolver agora**. Ele acompanha o feedback da resposta, mas não resolve questões seguintes sozinho.
+A chave da OpenAI API é diferente da assinatura do ChatGPT e precisa ter acesso à API habilitado. As chaves ficam no navegador e as solicitações vão diretamente ao provedor. O bookmarklet personalizado gerado contém as chaves; não o compartilhe.
 
 ## Arquivos
 
-- `index.html`: página de instalação, com o código atualizado embutido.
-- `ka-auto-answer.user.js`: versão para userscript manager.
-- `ka-auto-answer.bookmarklet.txt`: bookmarklet genérico, sem chaves.
-
-As chaves não estão incluídas no repositório. O bookmarklet personalizado gerado no navegador contém as chaves informadas; não o compartilhe.
+- index.html: página de instalação, com o código atualizado embutido.
+- ka-auto-answer.user.js: versão para gerenciador de userscripts.
+- ka-auto-answer.bookmarklet.txt: bookmarklet genérico, sem chaves.
