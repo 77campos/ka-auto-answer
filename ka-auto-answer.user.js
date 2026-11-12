@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Khan Academy — Auto Answer (IA)
 // @namespace    smith/ka
-// @version      7.5.0
-// @description  Lê a questão renderizada, resolve com OpenRouter/Gemini ou APIs OpenAI-compatible.
+// @version      7.6.0
+// @description  Lê a questão renderizada e usa OpenAI API, Gemini ou APIs compatíveis.
 // @match        https://*.khanacademy.org/*
 // @match        https://khanacademy.org/*
 // @run-at       document-idle
@@ -13,7 +13,7 @@
 (() => {
   'use strict';
 
-  const VERSION = '7.5.0';
+  const VERSION = '7.6.0';
   const LS_KEY = 'ka_auto_cfg_v8';
   const TIMEOUT = 25000;
   const GEMINI_TIMEOUT = 90000;
@@ -29,9 +29,9 @@
     {
       enabled: true,
       autoAdvance: false,
-      backend: 'auto', // auto | gemini | openrouter
-      model: '',
-      geminiModel: '',
+      backend: 'auto', // auto | openai | gemini
+      openaiModel: 'gpt-5.4-mini',
+      geminiModel: 'gemini-3.5-flash-lite',
       panelX: null,
       panelY: null,
       pollMs: 1200,
@@ -41,20 +41,22 @@
   );
 
   const saveCfg = () => { try { localStorage.setItem(LS_KEY, JSON.stringify(CFG)); } catch {} };
-  let KEYS = Object.assign({ gemini: '', openrouter: '', compatible: { baseUrl: '', model: '', keys: [] } }, safeParse(localStorage.getItem(KEYS_KEY)));
-  const keyPositions = { gemini: 0, openrouter: 0, compatible: 0 };
+  let KEYS = Object.assign({ openai: '', gemini: '', compatible: { baseUrl: '', model: '', keys: [] } }, safeParse(localStorage.getItem(KEYS_KEY)));
+  const keyPositions = { openai: 0, gemini: 0, compatible: 0 };
   function backendKeys(backend) {
     const value = backend === 'compatible' ? KEYS.compatible?.keys : KEYS[backend];
     return (Array.isArray(value) ? value : [value]).map((key) => String(key || '').trim()).filter(Boolean);
   }
 
   function configureKeys() {
-    const gemini = prompt('Cole sua chave Gemini (deixe vazio para manter a atual):');
+    const openai = prompt('Cole sua chave da OpenAI API (sk-...; deixe vazio para manter a atual):');
+    if (openai === null) return;
+    const gemini = prompt('Cole sua chave Gemini (AIza...; deixe vazio para manter a atual):');
     if (gemini === null) return;
-    const openrouter = prompt('Cole sua chave OpenRouter (deixe vazio para manter a atual):');
-    if (openrouter === null) return;
-    const model = prompt('Modelo Gemini (deixe vazio para manter):', CFG.geminiModel || 'gemini-3.5-flash-lite');
-    if (model === null) return;
+    const openaiModel = prompt('Modelo OpenAI API (deixe vazio para manter):', CFG.openaiModel || 'gpt-5.4-mini');
+    if (openaiModel === null) return;
+    const geminiModel = prompt('Modelo Gemini (deixe vazio para manter):', CFG.geminiModel || 'gemini-3.5-flash-lite');
+    if (geminiModel === null) return;
     const compat = KEYS.compatible || { baseUrl: '', model: '', keys: [] };
     const compatKey = prompt('Chave da API compatível com OpenAI (opcional; deixe vazio para manter):');
     if (compatKey === null) return;
@@ -62,10 +64,11 @@
     if (compatUrl === null) return;
     const compatModel = prompt('Modelo dessa API compatível:', compat.model || '');
     if (compatModel === null) return;
+    if (openai.trim()) KEYS.openai = [openai.trim()];
     if (gemini.trim()) KEYS.gemini = [gemini.trim()];
-    if (openrouter.trim()) KEYS.openrouter = [openrouter.trim()];
-    keyPositions.gemini = keyPositions.openrouter = 0;
-    if (model.trim()) CFG.geminiModel = model.trim();
+    keyPositions.openai = keyPositions.gemini = 0;
+    if (openaiModel.trim()) CFG.openaiModel = openaiModel.trim();
+    if (geminiModel.trim()) CFG.geminiModel = geminiModel.trim();
     if (compatKey.trim()) compat.keys = [compatKey.trim()];
     if (compatUrl.trim()) compat.baseUrl = compatUrl.trim();
     if (compatModel.trim()) compat.model = compatModel.trim();
@@ -73,8 +76,8 @@
     keyPositions.compatible = 0;
     saveCfg();
     try { localStorage.setItem(KEYS_KEY, JSON.stringify(KEYS)); } catch {}
-    geminiBlockedUntil = orBlockedUntil = compatibleBlockedUntil = 0;
-    geminiFails = orFails = compatibleFails = 0;
+    openaiBlockedUntil = geminiBlockedUntil = compatibleBlockedUntil = 0;
+    openaiFails = geminiFails = compatibleFails = 0;
     log('chaves atualizadas neste navegador; valores não são exibidos nos logs');
     setStatus('chaves salvas');
   }
@@ -138,10 +141,10 @@
   const tried = new Set();
 
   let lastBackendUsed = '';
+  let openaiBlockedUntil = 0;
+  let openaiFails = 0;
   let geminiBlockedUntil = 0;
   let geminiFails = 0;
-  let orBlockedUntil = 0;
-  let orFails = 0;
   let compatibleBlockedUntil = 0;
   let compatibleFails = 0;
 
@@ -176,7 +179,7 @@
     return b;
   }
 
-  const BACKEND_LABEL = { auto: 'Auto', gemini: 'Gemini', openrouter: 'OpenRouter', compatible: 'API compatível' };
+  const BACKEND_LABEL = { auto: 'Auto', openai: 'OpenAI API', gemini: 'Gemini', compatible: 'API compatível' };
 
   function setStatus(text) {
     statusText = text;
@@ -406,7 +409,7 @@
 
     const row2 = mk('div', { display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '6px', marginBottom: '10px', padding: '8px 9px', borderRadius: '12px', background: 'rgba(255,255,255,.035)', border: '1px solid rgba(255,255,255,.06)' });
     row2.appendChild(mk('span', { font: '700 10px system-ui, sans-serif', color: '#a99ab6', letterSpacing: '.08em', marginRight: '2px' }, 'IA'));
-    for (const k of ['auto', 'openrouter', 'gemini', 'compatible']) {
+    for (const k of ['auto', 'openai', 'gemini', 'compatible']) {
       const b = mkBtn(BACKEND_LABEL[k], '#1f2937');
       b.style.flex = '1 1 auto';
       b.dataset.kaAct = 'backend-' + k;
@@ -528,11 +531,11 @@
     if (!BACKEND_LABEL[k]) return;
     CFG.backend = k;
     saveCfg();
+    openaiBlockedUntil = 0;
     geminiBlockedUntil = 0;
-    orBlockedUntil = 0;
     compatibleBlockedUntil = 0;
+    openaiFails = 0;
     geminiFails = 0;
-    orFails = 0;
     compatibleFails = 0;
     log('IA: ' + BACKEND_LABEL[k]);
     setStatus('backend: ' + BACKEND_LABEL[k]);
@@ -581,7 +584,7 @@
     if (k === 'a') toggleEnabled();
     else if (k === 'd') togglePanel();
     else if (k === 's') {
-      setBackend(CFG.backend === 'auto' ? 'openrouter' : CFG.backend === 'openrouter' ? 'gemini' : 'auto');
+      setBackend(CFG.backend === 'auto' ? 'openai' : CFG.backend === 'openai' ? 'gemini' : 'auto');
     }
   });
 
@@ -870,43 +873,34 @@
     return j?.candidates?.[0]?.content?.parts?.map((p) => p.text).join('') || '';
   }
 
-  async function callOpenRouter(prompt, apiKey) {
-    if (!apiKey) throw makeErr('Chave OpenRouter ausente. Use “Configurar chaves”.', 401);
-    const r = await fetchWithTimeout(
-      'https://openrouter.ai/api/v1/chat/completions',
-      {
+  async function callOpenAI(prompt, apiKey) {
+    if (!apiKey) throw makeErr('Chave da OpenAI API ausente. Use “Configurar chaves”.', 401);
+    const model = CFG.openaiModel || 'gpt-5.4-mini';
+    let r;
+    try {
+      r = await fetchWithTimeout('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          authorization: `Bearer ${apiKey}`,
-          'HTTP-Referer': location.origin,
-          'X-Title': 'KA Auto Answer',
-        },
-        body: JSON.stringify({
-          model: CFG.model || 'openrouter/free',
-          temperature: 0,
-          messages: [
-            {
-              role: 'system',
-              content:
-                'You solve Khan Academy exercises accurately. Output only compact JSON. No markdown, no prose.',
-            },
-            { role: 'user', content: prompt },
-          ],
-        }),
-      },
-      TIMEOUT
-    );
+        headers: { 'content-type': 'application/json', authorization: 'Bearer ' + apiKey },
+        body: JSON.stringify({ model, messages: [
+          { role: 'system', content: 'Solve the exercise accurately. Return only compact JSON, without markdown or prose.' },
+          { role: 'user', content: prompt },
+        ], response_format: { type: 'json_object' } }),
+      }, TIMEOUT);
+    } catch (e) {
+      if (e && (/abort/i.test(e.name || '') || /abort/i.test(e.message || ''))) throw makeErr('OpenAI API excedeu o limite de 25 segundos.', 0);
+      throw e;
+    }
     if (!r.ok) {
       let retryMs = 0;
       const ra = r.headers.get('retry-after');
       if (ra) retryMs = Number.isFinite(Number(ra)) ? Number(ra) * 1000 : Math.max(0, Date.parse(ra) - Date.now());
       let detail = '';
       try { const j = await r.json(); detail = j?.error?.message || j?.message || ''; } catch {}
-      throw makeErr('OpenRouter HTTP ' + r.status + (detail ? ': ' + detail.slice(0, 180) : ''), r.status, retryMs);
+      throw makeErr('OpenAI API HTTP ' + r.status + (detail ? ': ' + detail.slice(0, 180) : ''), r.status, retryMs);
     }
-    const j = await r.json();
-    return j?.choices?.[0]?.message?.content || '';
+    const j = await r.json(), content = j?.choices?.[0]?.message?.content;
+    if (typeof content !== 'string' || !content.trim()) throw makeErr('OpenAI API retornou uma resposta vazia.', 502);
+    return content;
   }
 
   async function callCompatible(prompt, apiKey) {
@@ -943,14 +937,14 @@
     const now = Date.now();
     const ready = {
       gemini: now >= geminiBlockedUntil,
-      openrouter: now >= orBlockedUntil,
+      openai: now >= openaiBlockedUntil,
       compatible: now >= compatibleBlockedUntil,
     };
     const pref = CFG.backend === 'gemini'
-      ? ['gemini', 'openrouter', 'compatible']
+      ? ['gemini', 'openai', 'compatible']
       : CFG.backend === 'compatible'
-        ? ['compatible', 'openrouter', 'gemini']
-        : ['openrouter', 'gemini', 'compatible']; // OpenRouter permanece como principal
+        ? ['compatible', 'openai', 'gemini']
+        : ['openai', 'gemini', 'compatible']; // OpenAI API é o provedor principal
     return pref.filter((b) => backendKeys(b).length && ready[b]);
   }
 
@@ -966,15 +960,15 @@
       for (let attempt = 0; attempt < keys.length; attempt++) {
         const keyIndex = (keyPositions[b] || 0) % keys.length;
         try {
-          const raw = b === 'gemini'
-            ? await callGemini(prompt, keys[keyIndex])
-            : b === 'openrouter'
-              ? await callOpenRouter(prompt, keys[keyIndex])
+          const raw = b === 'openai'
+            ? await callOpenAI(prompt, keys[keyIndex])
+            : b === 'gemini'
+              ? await callGemini(prompt, keys[keyIndex])
               : await callCompatible(prompt, keys[keyIndex]);
           keyPositions[b] = keyIndex;
           lastBackendUsed = b;
-          if (b === 'gemini') geminiFails = 0;
-          else if (b === 'openrouter') orFails = 0;
+          if (b === 'openai') openaiFails = 0;
+          else if (b === 'gemini') geminiFails = 0;
           else compatibleFails = 0;
           if (i > 0) log('usando ' + BACKEND_LABEL[b] + ' (fallback)');
           return raw;
@@ -988,13 +982,13 @@
             continue;
           }
           const retryable = !status || status === 429 || status === 500 || status === 502 || status === 503 || status === 504;
-          const fails = b === 'gemini' ? ++geminiFails : b === 'openrouter' ? ++orFails : ++compatibleFails;
+          const fails = b === 'openai' ? ++openaiFails : b === 'gemini' ? ++geminiFails : ++compatibleFails;
           const base = e.retryMs || (status === 429 ? 60000 : 20000);
           const until = retryable
             ? Date.now() + Math.min(base * Math.pow(2, Math.max(0, fails - 1)), 30 * 60000)
             : Infinity;
-          if (b === 'gemini') geminiBlockedUntil = until;
-          else if (b === 'openrouter') orBlockedUntil = until;
+          if (b === 'openai') openaiBlockedUntil = until;
+          else if (b === 'gemini') geminiBlockedUntil = until;
           else compatibleBlockedUntil = until;
           if (retryable) log(BACKEND_LABEL[b] + ' em espera por ' + Math.ceil((until - Date.now()) / 1000) + 's (HTTP ' + (status || 'rede') + ')');
           else log(BACKEND_LABEL[b] + ' indisponível até corrigir chave, modelo ou permissão (HTTP ' + status + ')');
